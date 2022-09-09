@@ -48,6 +48,11 @@ class Linformer(tf.keras.Model):
         self.dense1 = tf.keras.layers.Dense(4, activation=tf.nn.relu)
         self.dense2 = tf.keras.layers.Dense(5, activation=tf.nn.softmax)
 
-    def call(self, input: tf.Tensor) -> tf.Tensor:
+    def call(self, inputs: tf.Tensor) -> tf.Tensor:
         x = self.dense1(inputs)
         return self.dense2(x)
+
+    def num_params(self) -> int:
+        trainable_params = tf.math.reduce_sum(tf.size(v) for v in self.trainable_weights).numpy()
+        non_trainable_params = tf.math.reduce_sum(tf.size(v) for v in self.non_trainable_weights).numpy()
+        return trainable_params + non_trainable_params
