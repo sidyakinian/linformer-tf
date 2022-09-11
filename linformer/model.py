@@ -94,11 +94,15 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
         return outputs
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self):
+    def __init__(self, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float):
         super().__init__()
-
+        self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout)
+        self.ffn = MLP(d_ff=d_ff, d_output=d_model, activation="gelu", dropout=dropout)
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
+        # TODO: add layer norm
+        x = x + self.mha(x, x, x)
+        x = x + self.ff(x)
         return x
 
 class Encoder(tf.keras.Model):
@@ -113,11 +117,16 @@ class Encoder(tf.keras.Model):
         return x
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self):
+    def __init__(self, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float):
         super().__init__()
+        self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout)
+        self.cross_attention = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout)
+        self.ff = MLP(d_ff=d_ff, d_output=d_model, activation="gelu", dropout=dropout)
 
-
-    def call(self, x: tf.Tensor) -> tf.Tensor:
+    def call(self, x: tf.Tensor, encoding: tf.Tensor) -> tf.Tensor:
+        x = x + self.mha(x, x, x)
+        x = x + self.cross_attention(encoding, x, encoding)
+        x = x + self.ff(x)
         return x
 
 class Decoder(tf.keras.Model):
