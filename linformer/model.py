@@ -49,7 +49,7 @@ class LinearSelfAttention(tf.keras.layers.Layer):
 
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor, ) -> tf.Tensor:
         # K, Q, V are all of shape (batch_size, n_heads, n, d_k)
-        assert tf.shape(K), tf.shape(Q), tf.shape(V), "K, Q, V must have the same shape"
+        assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
         K = tf.transpose(K, perm=[0, 1, 3, 2]) # (batch_size, n_heads, d_k, n)
         if not self.full_attn:
             K = self.e(K) # (batch_size, n_heads, d_k, k)
@@ -76,7 +76,7 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
 
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor) -> tf.Tensor:
         # shape of K, Q, V: (batch_size, n, d_model)
-        assert tf.shape(K), tf.shape(Q), tf.shape(V), "K, Q, V must have the same shape"
+        assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
         batch_size, n, d_k = tf.shape(K)
 
         def reshape_for_multihead_attention(M):
