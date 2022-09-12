@@ -150,13 +150,9 @@ class Linformer(tf.keras.Model):
         self.encoder = Encoder(n_layers=n_layers, k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
         self.decoder = Decoder(n_layers=n_layers, k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
 
+    # Takes in vectorized tensor
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
-        # TODO: tokenize text (should be outside of this module probably)
-        padded_inputs = tf.keras.preprocessing.sequence.pad_sequences(
-            inputs, padding="post"
-        )
-        padded_tensor = tf.convert_to_tensor(padded_inputs)
-        embeddings = self.embeddings_layer(padded_tensor)
+        embeddings = self.embeddings_layer(inputs)
         encoding = self.encoder(embeddings)
         # print(f"shapes of: padded_tensor = {embeddings.shape}, encoding = {encoding.shape}")
         logits = self.decoder(embeddings, encoding)
