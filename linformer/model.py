@@ -101,12 +101,16 @@ class EncoderLayer(tf.keras.layers.Layer):
         super().__init__()
         self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
         self.ff = MLP(d_ff=d_ff, d_output=d_model, activation="gelu", dropout=dropout)
+        self.norm1 = LayerNormalization(epsilon=1e-6)
+        self.norm2 = LayerNormalization(epsilon=1e-6)
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         # TODO: add layer norm
         print("encoder mha...")
         x = x + self.mha(x, x, x)
+        x = self.norm1(x)
         x = x + self.ff(x)
+        x = self.norm2(x)
         return x
 
 class Encoder(tf.keras.Model):
@@ -125,7 +129,6 @@ class Linformer(tf.keras.Model):
         self.pooler = GlobalAveragePooling1D()
         self.classifier = Dense(3, activation="softmax")
 
-    # Takes in vectorized tensor
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
         embeddings = self.embeddings_layer(inputs)
         encoding = self.encoder(embeddings)
