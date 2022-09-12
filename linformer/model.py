@@ -1,7 +1,7 @@
 from json import decoder, encoder
 import tensorflow as tf
 
-from tensorflow.keras.layers import Dense, LayerNormalization, Dropout, Activation
+from tensorflow.keras.layers import Dense, LayerNormalization, Dropout, Activation, GlobalAveragePooling1D
 
 class EmbeddingsLayer(tf.keras.layers.Layer):
     def __init__(self, max_len: int, vocab_size: int, d_model: int):
@@ -49,7 +49,7 @@ class LinearSelfAttention(tf.keras.layers.Layer):
 
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor, ) -> tf.Tensor:
         # K, Q, V are all of shape (batch_size, n_heads, n, d_k)
-        assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
+        # assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
         K = tf.transpose(K, perm=[0, 1, 3, 2]) # (batch_size, n_heads, d_k, n)
         if not self.full_attn:
             K = self.e(K) # (batch_size, n_heads, d_k, k)
@@ -63,7 +63,6 @@ class LinearSelfAttention(tf.keras.layers.Layer):
         return tf.matmul(P_bar, V) # (batch_size, n_heads, n, d_k)
 
 class MultiHeadLinearAttention(tf.keras.layers.Layer):
-    # For MHA, just include n_heads as another dimension. Linear attention module should work with that dimension then
     def __init__(self, k: int, d_model: int, n_heads: int, dropout: float, full_attn: bool):
         super().__init__()
         assert d_model % n_heads == 0, "d_model must be divisible by n_heads"
@@ -76,8 +75,9 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
 
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor) -> tf.Tensor:
         # shape of K, Q, V: (batch_size, n, d_model)
-        assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
-        batch_size, n, d_k = tf.shape(K)
+        # assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
+        print(f"tf.shape(K) = {tf.shape(K)}, type = {type(tf.shape(K))}")
+        batch_size, n, d_k = tf.shape(K).numpy()
 
         def reshape_for_multihead_attention(M):
             M = tf.reshape(M, shape=[batch_size, n, self.n_heads, self.d_k])
@@ -117,46 +117,20 @@ class Encoder(tf.keras.Model):
     def call(self, x: tf.Tensor) -> tf.Tensor:
         return self.model(x)
 
-class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float, full_attn: bool):
-        super().__init__()
-        self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
-        self.cross_attention = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
-        self.ff = MLP(d_ff=d_ff, d_output=d_model, activation="gelu", dropout=dropout)
-
-    def call(self, x: tf.Tensor, encoding: tf.Tensor) -> tf.Tensor:
-        print("decoder mha...")
-        x = x + self.mha(x, x, x)
-        print("decoder cross attn...")
-        x = x + self.cross_attention(encoding, x, encoding)
-        x = x + self.ff(x)
-        return x
-
-class Decoder(tf.keras.Model):
-    def __init__(self, n_layers: int, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float, full_attn: bool):
-        super().__init__()
-        self.decoder_layers = [DecoderLayer(k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn) for _ in range(n_layers)]
-
-    def call(self, x: tf.Tensor, encoding: tf.Tensor) -> tf.Tensor:
-        # TODO; not sure if encoding is passed properly
-        for layer in self.decoder_layers:
-            x = layer(x, encoding)
-        return x
-
 class Linformer(tf.keras.Model):
     def __init__(self, k: int, max_len: int, vocab_size: int, d_model: int, d_ff: int, n_heads: int, n_layers: int, dropout: float, full_attn: bool):
         super().__init__()
         self.embeddings_layer = EmbeddingsLayer(max_len=max_len, vocab_size=vocab_size, d_model=d_model)
         self.encoder = Encoder(n_layers=n_layers, k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
-        self.decoder = Decoder(n_layers=n_layers, k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
+        self.pooler = GlobalAveragePooling1D()
+        self.classifier = Dense(3, activation="softmax")
 
     # Takes in vectorized tensor
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
         embeddings = self.embeddings_layer(inputs)
         encoding = self.encoder(embeddings)
-        logits = self.decoder(embeddings, encoding)
-        # TODO: softmax and ff on outputs
-        outputs = logits # TODO: change this
+        pooled_output = self.pooler(encoding)
+        outputs = self.classifier(pooled_output)
         return outputs
 
     def num_params(self) -> int:
