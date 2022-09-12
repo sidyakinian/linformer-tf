@@ -105,8 +105,6 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.norm2 = LayerNormalization(epsilon=1e-6)
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
-        # TODO: add layer norm
-        print("encoder mha...")
         x = x + self.mha(x, x, x)
         x = self.norm1(x)
         x = x + self.ff(x)
