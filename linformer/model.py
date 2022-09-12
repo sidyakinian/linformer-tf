@@ -49,7 +49,7 @@ class LinearSelfAttention(tf.keras.layers.Layer):
 
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor, ) -> tf.Tensor:
         # K, Q, V are all of shape (batch_size, n_heads, n, d_k)
-        assert K.shape == Q.shape == V.shape, f"K, Q, V must have the same shape, but got {K.shape}, {Q.shape}, {V.shape}"
+        assert tf.shape(K), tf.shape(Q), tf.shape(V), "K, Q, V must have the same shape"
         K = tf.transpose(K, perm=[0, 1, 3, 2]) # (batch_size, n_heads, d_k, n)
         if not self.full_attn:
             K = self.e(K) # (batch_size, n_heads, d_k, k)
@@ -76,11 +76,11 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
 
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor) -> tf.Tensor:
         # shape of K, Q, V: (batch_size, n, d_model)
-        assert K.shape == Q.shape == V.shape, "K, Q, V must have the same shape"
-        batch_size, n, d_k = K.shape
+        assert tf.shape(K), tf.shape(Q), tf.shape(V), "K, Q, V must have the same shape"
+        batch_size, n, d_k = tf.shape(K)
 
         def reshape_for_multihead_attention(M):
-            M = tf.reshape(K, shape=[batch_size, n, self.n_heads, self.d_k])
+            M = tf.reshape(M, shape=[batch_size, n, self.n_heads, self.d_k])
             M = tf.transpose(M, perm=[0, 2, 1, 3]) # shape (batch_size, n_heads, n, d_k)
             return M
 
@@ -154,7 +154,6 @@ class Linformer(tf.keras.Model):
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
         embeddings = self.embeddings_layer(inputs)
         encoding = self.encoder(embeddings)
-        # print(f"shapes of: padded_tensor = {embeddings.shape}, encoding = {encoding.shape}")
         logits = self.decoder(embeddings, encoding)
         # TODO: softmax and ff on outputs
         outputs = logits # TODO: change this
