@@ -32,41 +32,45 @@ class MLP(tf.keras.layers.Layer):
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         x = self.fc1(x)
-        x = self.drop(x)
+        x = self.dropout(x)
         x = self.fc2(x)
-        x = self.drop(x)
+        x = self.dropout(x)
         return x
 
 class LinearSelfAttention(tf.keras.layers.Layer):
-    def __init__(self, k: int, d_k: int, dropout: float):
+    def __init__(self, k: int, d_k: int, dropout: float, full_attn: bool):
         super().__init__()
         self.dropout = Dropout(dropout)
         self.d_k = d_k
-        self.e = Dense(k)
-        self.f = Dense(k)
+        self.full_attn = full_attn
+        if not full_attn:
+            self.e = Dense(k)
+            self.f = Dense(k)
 
-    def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor) -> tf.Tensor:
+    def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor, ) -> tf.Tensor:
         # K, Q, V are all of shape (batch_size, n_heads, n, d_k)
         assert K.shape == Q.shape == V.shape, f"K, Q, V must have the same shape, but got {K.shape}, {Q.shape}, {V.shape}"
         K = tf.transpose(K, perm=[0, 1, 3, 2]) # (batch_size, n_heads, d_k, n)
-        K = self.e(K) # (batch_size, n_heads, d_k, k)
+        if not self.full_attn:
+            K = self.e(K) # (batch_size, n_heads, d_k, k)
         QK = tf.matmul(Q, K) / tf.math.sqrt(tf.cast(self.d_k, dtype=tf.float32)) # shape (batch_size, n_heads, n, k)
         P_bar = tf.nn.softmax(QK, axis=-1) # along k dimension, otherwise pointless. shape (batch_size, n_heads, n, k)
         P_bar = self.dropout(P_bar)
         V = tf.transpose(V, perm=[0, 1, 3, 2]) # (batch_size, n_heads, d_k, n)
-        V = self.f(V) # (batch_size, n_heads, d_k, k)
+        if not self.full_attn:
+            V = self.f(V) # (batch_size, n_heads, d_k, k)
         V = tf.transpose(V, perm=[0, 1, 3, 2]) # (batch_size, n_heads, k, d_k)
         return tf.matmul(P_bar, V) # (batch_size, n_heads, n, d_k)
 
 class MultiHeadLinearAttention(tf.keras.layers.Layer):
     # For MHA, just include n_heads as another dimension. Linear attention module should work with that dimension then
-    def __init__(self, k: int, d_model: int, n_heads: int, dropout: float):
+    def __init__(self, k: int, d_model: int, n_heads: int, dropout: float, full_attn: bool):
         super().__init__()
         assert d_model % n_heads == 0, "d_model must be divisible by n_heads"
         self.d_k = d_model // n_heads
         self.d_model = d_model
         self.n_heads = n_heads
-        self.linear_attention = LinearSelfAttention(k=k, d_k=self.d_k, dropout=dropout)
+        self.linear_attention = LinearSelfAttention(k=k, d_k=self.d_k, dropout=dropout, full_attn=full_attn)
         self.w_o = Dense(d_model)
         self.dropout = Dropout(dropout)
 
@@ -77,7 +81,6 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
 
         def reshape_for_multihead_attention(M):
             M = tf.reshape(K, shape=[batch_size, n, self.n_heads, self.d_k])
-            print(f"M.shape = {M.shape}")
             M = tf.transpose(M, perm=[0, 2, 1, 3]) # shape (batch_size, n_heads, n, d_k)
             return M
 
@@ -94,66 +97,71 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
         return outputs
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float):
+    def __init__(self, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float, full_attn: bool):
         super().__init__()
-        self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout)
-        self.ffn = MLP(d_ff=d_ff, d_output=d_model, activation="gelu", dropout=dropout)
+        self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
+        self.ff = MLP(d_ff=d_ff, d_output=d_model, activation="gelu", dropout=dropout)
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         # TODO: add layer norm
+        print("encoder mha...")
         x = x + self.mha(x, x, x)
         x = x + self.ff(x)
         return x
 
 class Encoder(tf.keras.Model):
-    def __init__(self, encoder_layer: EncoderLayer, n_layers: int):
+    def __init__(self, n_layers: int, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float, full_attn: bool):
         super().__init__()
-        self.encoder_layer = encoder_layer
-        self.n_layers = n_layers
+        self.model = tf.keras.Sequential([EncoderLayer(k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn) for _ in range(n_layers)])
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
-        for _ in range(self.n_layers):
-            x = self.encoder_layer(x)
-        return x
+        return self.model(x)
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float):
+    def __init__(self, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float, full_attn: bool):
         super().__init__()
-        self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout)
-        self.cross_attention = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout)
+        self.mha = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
+        self.cross_attention = MultiHeadLinearAttention(k=k, d_model=d_model, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
         self.ff = MLP(d_ff=d_ff, d_output=d_model, activation="gelu", dropout=dropout)
 
     def call(self, x: tf.Tensor, encoding: tf.Tensor) -> tf.Tensor:
+        print("decoder mha...")
         x = x + self.mha(x, x, x)
+        print("decoder cross attn...")
         x = x + self.cross_attention(encoding, x, encoding)
         x = x + self.ff(x)
         return x
 
 class Decoder(tf.keras.Model):
-    def __init__(self, decoder_layer: DecoderLayer, n_layers: int):
+    def __init__(self, n_layers: int, k: int, d_model: int, d_ff: int, n_heads: int, dropout: float, full_attn: bool):
         super().__init__()
-        self.decoder_layer = decoder_layer
-        self.n_layers = n_layers
+        self.decoder_layers = [DecoderLayer(k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn) for _ in range(n_layers)]
 
     def call(self, x: tf.Tensor, encoding: tf.Tensor) -> tf.Tensor:
-        for _ in range(self.n_layers):
-            x = self.decoder_layer(x, encoding)
+        # TODO; not sure if encoding is passed properly
+        for layer in self.decoder_layers:
+            x = layer(x, encoding)
         return x
 
 class Linformer(tf.keras.Model):
-    def __init__(self, embeddings_layer: tf.keras.layers.Layer, encoder: tf.keras.Model, decoder: tf.keras.Model):
+    def __init__(self, k: int, max_len: int, vocab_size: int, d_model: int, d_ff: int, n_heads: int, n_layers: int, dropout: float, full_attn: bool):
         super().__init__()
-        self.embeddings_layer = embeddings_layer
-        self.encoder = encoder
-        self.decoder = decoder
+        self.embeddings_layer = EmbeddingsLayer(max_len=max_len, vocab_size=vocab_size, d_model=d_model)
+        self.encoder = Encoder(n_layers=n_layers, k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
+        self.decoder = Decoder(n_layers=n_layers, k=k, d_model=d_model, d_ff=d_ff, n_heads=n_heads, dropout=dropout, full_attn=full_attn)
 
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
-        # Tokenize text (should be outside of this module probably)
-        inputs = self.embeddings_layer(inputs)
-        encoding = self.encoder(inputs)
-        logits = self.decoder(inputs, encoding)
-        # Softmax and ff on outputs
-        outputs = logits # TODO: Change this
+        # TODO: tokenize text (should be outside of this module probably)
+        padded_inputs = tf.keras.preprocessing.sequence.pad_sequences(
+            inputs, padding="post"
+        )
+        padded_tensor = tf.convert_to_tensor(padded_inputs)
+        embeddings = self.embeddings_layer(padded_tensor)
+        encoding = self.encoder(embeddings)
+        # print(f"shapes of: padded_tensor = {embeddings.shape}, encoding = {encoding.shape}")
+        logits = self.decoder(embeddings, encoding)
+        # TODO: softmax and ff on outputs
+        outputs = logits # TODO: change this
         return outputs
 
     def num_params(self) -> int:
