@@ -76,7 +76,6 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor) -> tf.Tensor:
         # shape of K, Q, V: (batch_size, n, d_model)
         # assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
-        print(f"tf.shape(K) = {tf.shape(K)}, type = {type(tf.shape(K))}")
         batch_size, n, d_k = tf.shape(K).numpy()
 
         def reshape_for_multihead_attention(M):
