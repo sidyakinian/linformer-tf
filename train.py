@@ -1,7 +1,7 @@
 import tensorflow_datasets as tfds
 import tensorflow as tf
 from tensorflow.keras.layers import TextVectorization
-from linformer.model import Linformer
+from linformer.linformer import Linformer
 
 ## Data preprocessing
 

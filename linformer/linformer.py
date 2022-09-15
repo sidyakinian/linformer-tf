@@ -90,9 +90,11 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
         attention_output = self.linear_attention(K, Q, V)
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3]) # shape (batch_size, n, n_heads, d_k)
         attention_output = tf.reshape(attention_output, shape=[batch_size, n, self.d_model]) # shape (batch_size, n, d_model)
+        print(f"shape of attention_output: {attention_output.shape}")
         # TODO: double check w_o
         outputs = self.w_o(attention_output)
-    
+        print(f"shape of outputs: {outputs.shape}")
+
         return outputs
 
 class EncoderLayer(tf.keras.layers.Layer):
