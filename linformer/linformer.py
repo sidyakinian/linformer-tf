@@ -2,6 +2,7 @@ from json import decoder, encoder
 import tensorflow as tf
 
 from tensorflow.keras.layers import Dense, LayerNormalization, Dropout, Activation, GlobalAveragePooling1D
+from utils import reshape_for_multihead_attention
 
 class EmbeddingsLayer(tf.keras.layers.Layer):
     def __init__(self, max_len: int, vocab_size: int, d_model: int):
@@ -78,22 +79,15 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
         # assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
         batch_size, n, d_k = tf.shape(K).numpy()
 
-        def reshape_for_multihead_attention(M):
-            M = tf.reshape(M, shape=[batch_size, n, self.n_heads, self.d_k])
-            M = tf.transpose(M, perm=[0, 2, 1, 3]) # shape (batch_size, n_heads, n, d_k)
-            return M
-
-        K = reshape_for_multihead_attention(K)  
-        Q = reshape_for_multihead_attention(Q)
-        V = reshape_for_multihead_attention(V)
+        K = reshape_for_multihead_attention(K, batch_size, n, self.n_heads, self.d_k)  
+        Q = reshape_for_multihead_attention(Q, batch_size, n, self.n_heads, self.d_k)
+        V = reshape_for_multihead_attention(V, batch_size, n, self.n_heads, self.d_k)
         
         attention_output = self.linear_attention(K, Q, V)
+        # Concat heads with transpose and reshape
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3]) # shape (batch_size, n, n_heads, d_k)
         attention_output = tf.reshape(attention_output, shape=[batch_size, n, self.d_model]) # shape (batch_size, n, d_model)
-        print(f"shape of attention_output: {attention_output.shape}")
-        # TODO: double check w_o
         outputs = self.w_o(attention_output)
-        print(f"shape of outputs: {outputs.shape}")
 
         return outputs
 
