@@ -14,15 +14,15 @@ class EmbeddingsLayer(tf.keras.layers.Layer):
         self.position_embedding = tf.keras.layers.Embedding(input_dim=max_len, output_dim=d_model)
     
     def call(self, x: tf.Tensor) -> tf.Tensor:
-        # Embeddings
+        # Word embeddings
         x = self.embedding(x)
 
         # Positional embeddings
-        positions = tf.range(start=0, limit=self.max_len) # Use trig positions later, they ostensibly work better
+        # TODO: add trig encodings
+        positions = tf.range(start=0, limit=self.max_len)
         positions = self.position_embedding(positions)
 
         return x + positions
-
 
 class MLP(tf.keras.layers.Layer):
     def __init__(self, d_ff: int, d_output: int, activation: Activation, dropout: float):
@@ -50,7 +50,6 @@ class LinearSelfAttention(tf.keras.layers.Layer):
 
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor, ) -> tf.Tensor:
         # K, Q, V are all of shape (batch_size, n_heads, n, d_k)
-        # assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
         K = tf.transpose(K, perm=[0, 1, 3, 2]) # (batch_size, n_heads, d_k, n)
         if not self.full_attn:
             K = self.e(K) # (batch_size, n_heads, d_k, k)
@@ -77,6 +76,7 @@ class MultiHeadLinearAttention(tf.keras.layers.Layer):
     def call(self, K: tf.Tensor, Q: tf.Tensor, V: tf.Tensor) -> tf.Tensor:
         # shape of K, Q, V: (batch_size, n, d_model)
         # assert tf.shape(K) == tf.shape(Q) == tf.shape(V), "K, Q, V must have the same shape"
+        # TODO: find another way to determine shape other than passing batch size on model init
         batch_size, n, d_k = tf.shape(K).numpy()
 
         K = reshape_for_multihead_attention(K, batch_size, n, self.n_heads, self.d_k)  

@@ -1,4 +1,5 @@
-tensorflow-macos
+tensorflow 
+# tensorflow-macos # Use this is on macOS
 numpy
 pandas
 matplotlib
