@@ -16,6 +16,8 @@ model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=
 model.fit(x=x_train, y=y_train, batch_size=16, epochs=25, validation_data = (x_val, y_val), callbacks=[tensorboard_callback])
 ```
 
+Don't forget to setup the environment with your preferred tools. The requirements file is included (if you use macOS, please change the Tensorflow package accordingly).
+
 ## Known issues
 
 * Batch size is passed on model initialization, because otherwise it's difficult to get the batch size from tensor shape unless the code is run eagerly (but eager execution is slow compared to graph-optimized execution).
